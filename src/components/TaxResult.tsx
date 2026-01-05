@@ -1,9 +1,10 @@
 import React from 'react';
-import { TaxCalculationResult } from '../types';
+import { TaxCalculationResult, TaxInput } from '../types';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface TaxResultProps {
   result: TaxCalculationResult | null;
-  input?: any;
+  input?: TaxInput;
 }
 
 const TaxResult: React.FC<TaxResultProps> = ({ result, input }) => {
@@ -145,6 +146,99 @@ const TaxResult: React.FC<TaxResultProps> = ({ result, input }) => {
           </div>
         </div>
       )}
+      
+      {/* 最优计税方式推荐 */}
+      {annualResult.bonusTaxableIncome > 0 && annualResult.recommendedBonusTaxType && (
+        <div className="mb-8 bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400">
+          <h3 className="text-lg font-semibold mb-3 text-gray-700">最优计税方式推荐</h3>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">推荐计税方式</p>
+              <p className="text-xl font-bold text-yellow-600">
+                {annualResult.recommendedBonusTaxType === 'separate' ? '单独计税' : '并入综合所得计税'}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">推荐方式下总应纳税额</p>
+                <p className="text-lg font-bold text-green-600">¥{annualResult.recommendedTaxAmount?.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">节税额</p>
+                <p className="text-lg font-bold text-green-600">¥{annualResult.taxSavings?.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">当前选择方式总应纳税额</p>
+                <p className={`text-lg font-bold ${annualResult.taxSavings && annualResult.taxSavings > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  ¥{annualResult.totalWithBonusTax.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">单独计税总应纳税额</p>
+                <p className="text-lg font-bold text-gray-700">¥{annualResult.separateTaxAmount?.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-lg">
+                <p className="text-xs text-gray-600 mb-1">并入综合所得总应纳税额</p>
+                <p className="text-lg font-bold text-gray-700">¥{annualResult.integratedTaxAmount?.toFixed(2)}</p>
+              </div>
+            </div>
+            {annualResult.taxSavings && annualResult.taxSavings > 0 && (
+              <div className="bg-green-50 p-3 rounded-lg">
+                <p className="text-sm text-green-700">
+                  💡 <strong>建议</strong>：您选择的计税方式与推荐方式相比，需多缴纳 ¥{annualResult.taxSavings.toFixed(2)} 的税款。
+                  建议改为「{annualResult.recommendedBonusTaxType === 'separate' ? '单独计税' : '并入综合所得计税'}」，以节省税款。
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 税收变化趋势图 */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-3 text-gray-700">月度税收变化趋势</h3>
+        <div className="h-80 bg-gray-50 p-4 rounded-lg">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={monthlyResults}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <XAxis 
+                dataKey="month" 
+                label={{ value: '月份', position: 'insideBottom', offset: -5 }} 
+                tickFormatter={(month) => `${month}月`}
+              />
+              <YAxis 
+                label={{ value: '金额 (元)', angle: -90, position: 'insideLeft' }}
+                tickFormatter={(value) => `¥${value.toFixed(0)}`}
+              />
+              <Tooltip 
+                formatter={(value: number | undefined) => [`¥${value?.toFixed(2) || '0.00'}`, '']}
+                labelFormatter={(label) => `${label}月`}
+              />
+              <Legend />
+              <Line 
+                type="monotone" 
+                dataKey="taxAmount" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                name="当月应纳税额" 
+                dot={{ fill: '#3b82f6', r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="cumulativeTaxAmount" 
+                stroke="#10b981" 
+                strokeWidth={2}
+                name="累计应纳税额" 
+                dot={{ fill: '#10b981', r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
       
       {/* 每月税收明细 */}
       <div>

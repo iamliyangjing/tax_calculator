@@ -24,7 +24,7 @@ export const DEFAULT_HOUSING_FUND_RATIO = 0.12; // 公积金12%
 export const DEFAULT_SPECIAL_DEDUCTION = {
   childrenEducation: 0,
   continuingEducation: 0,
- 大病医疗: 0,
+  majorDiseaseMedical: 0,
   housingLoanInterest: 0,
   housingRent: 0,
   supportingElderly: 0,

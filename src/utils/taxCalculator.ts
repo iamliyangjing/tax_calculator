@@ -1,5 +1,14 @@
-import { TaxInput, TaxCalculationResult, MonthlyTaxResult, AnnualTaxResult } from '../types';
+import { TaxInput, TaxCalculationResult, MonthlyTaxResult, AnnualTaxResult, BonusTaxType } from '../types';
 import { TAX_RATES, 起征点 } from './constants';
+
+// 计算结果缓存
+const cache = new Map<string, TaxCalculationResult>();
+const MAX_CACHE_SIZE = 50; // 最大缓存数量
+
+// 生成缓存键
+const generateCacheKey = (input: TaxInput): string => {
+  return JSON.stringify(input);
+};
 
 // 根据应纳税所得额计算税额
 const calculateTaxAmount = (taxableIncome: number): number => {
@@ -24,7 +33,7 @@ const calculateMonthlyTaxableIncome = (
   monthlySalary: number,
   monthlyOtherIncome: number,
   housingFundRatio: number,
-  socialSecurityInputType: string,
+  socialSecurityInputType: 'ratio' | 'fixed',
   socialSecurityRatio: number,
   socialSecurityFixed: number,
   specialDeductionAmount: number,
@@ -56,7 +65,7 @@ const calculateSpecialDeductionTotal = (specialDeduction: TaxInput['specialDeduc
   return (
     specialDeduction.childrenEducation +
     specialDeduction.continuingEducation +
-    specialDeduction.大病医疗 +
+    specialDeduction.majorDiseaseMedical +
     specialDeduction.housingLoanInterest +
     specialDeduction.housingRent +
     specialDeduction.supportingElderly
@@ -155,20 +164,44 @@ const calculateAnnualTax = (input: TaxInput): AnnualTaxResult => {
   let bonusTaxableIncome = 0;
   let totalWithBonusTax = totalTaxAmount;
   
+  // 计算两种计税方式下的税额
+  let separateTaxAmount = totalTaxAmount;
+  let integratedTaxAmount = totalTaxAmount;
+  
   if (yearEndBonus > 0) {
+    // 计算单独计税方式下的总税额
+    separateTaxAmount = totalTaxAmount + calculateBonusTaxSeparate(yearEndBonus);
+    
+    // 计算并入综合所得计税方式下的总税额
+    const totalTaxableIncomeWithBonus = totalTaxableIncome + yearEndBonus;
+    integratedTaxAmount = calculateTaxAmount(totalTaxableIncomeWithBonus);
+    
     if (bonusTaxType === 'separate') {
       // 年终奖单独计税
       bonusTaxAmount = calculateBonusTaxSeparate(yearEndBonus);
       bonusTaxableIncome = yearEndBonus;
-      totalWithBonusTax = totalTaxAmount + bonusTaxAmount;
+      totalWithBonusTax = separateTaxAmount;
     } else {
       // 年终奖并入综合所得计税
-      const totalTaxableIncomeWithBonus = totalTaxableIncome + yearEndBonus;
-      const totalTaxAmountWithBonus = calculateTaxAmount(totalTaxableIncomeWithBonus);
-      bonusTaxAmount = totalTaxAmountWithBonus - totalTaxAmount;
+      bonusTaxAmount = integratedTaxAmount - totalTaxAmount;
       bonusTaxableIncome = yearEndBonus;
-      totalWithBonusTax = totalTaxAmountWithBonus;
+      totalWithBonusTax = integratedTaxAmount;
     }
+  }
+  
+  // 推荐最优计税方式
+  let recommendedBonusTaxType: BonusTaxType;
+  let recommendedTaxAmount: number;
+  let taxSavings: number;
+  
+  if (separateTaxAmount <= integratedTaxAmount) {
+    recommendedBonusTaxType = BonusTaxType.Separate;
+    recommendedTaxAmount = separateTaxAmount;
+    taxSavings = integratedTaxAmount - separateTaxAmount;
+  } else {
+    recommendedBonusTaxType = BonusTaxType.Integrated;
+    recommendedTaxAmount = integratedTaxAmount;
+    taxSavings = separateTaxAmount - integratedTaxAmount;
   }
   
   // 假设每月已预缴税额等于计算的每月税额，那么年度汇算清缴时退/补税额为0
@@ -182,20 +215,46 @@ const calculateAnnualTax = (input: TaxInput): AnnualTaxResult => {
     monthlyResults,
     bonusTaxAmount,
     bonusTaxableIncome,
-    totalWithBonusTax
+    totalWithBonusTax,
+    // 最优计税方式推荐
+    recommendedBonusTaxType,
+    recommendedTaxAmount,
+    taxSavings,
+    separateTaxAmount,
+    integratedTaxAmount
   };
 };
 
 // 主税收计算函数
 export const calculateTax = (input: TaxInput): TaxCalculationResult => {
+  // 生成缓存键
+  const cacheKey = generateCacheKey(input);
+  
+  // 检查缓存中是否有结果
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)!;
+  }
+  
   // 计算年度税收结果
   const annualResult = calculateAnnualTax(input);
   
   // 获取当月（第1个月）的应扣税额
   const monthlyTax = annualResult.monthlyResults[0].taxAmount;
   
-  return {
+  const result = {
     monthlyTax,
     annualResult
   };
+  
+  // 将结果存入缓存
+  if (cache.size >= MAX_CACHE_SIZE) {
+    // 移除最早的缓存项
+    const firstKey = cache.keys().next().value;
+    if (firstKey !== undefined) {
+      cache.delete(firstKey);
+    }
+  }
+  cache.set(cacheKey, result);
+  
+  return result;
 };

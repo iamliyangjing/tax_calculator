@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,6 +11,12 @@ import {
   DEFAULT_SOCIAL_SECURITY_FIXED,
   DEFAULT_YEAR_END_BONUS
 } from '../utils/constants';
+import { 
+  getAllSchemes, 
+  saveScheme, 
+  loadScheme,
+  CalculationScheme 
+} from '../utils/schemeStorage';
 
 // 表单验证schema
 const formSchema = z.object({
@@ -23,7 +29,7 @@ const formSchema = z.object({
   specialDeduction: z.object({
     childrenEducation: z.number().min(0, '子女教育扣除不能为负数'),
     continuingEducation: z.number().min(0, '继续教育扣除不能为负数'),
-    大病医疗: z.number().min(0, '大病医疗扣除不能为负数'),
+    majorDiseaseMedical: z.number().min(0, '大病医疗扣除不能为负数'),
     housingLoanInterest: z.number().min(0, '住房贷款利息扣除不能为负数'),
     housingRent: z.number().min(0, '住房租金扣除不能为负数'),
     supportingElderly: z.number().min(0, '赡养老人扣除不能为负数'),
@@ -41,12 +47,17 @@ interface InputFormProps {
 }
 
 const InputForm: React.FC<InputFormProps> = ({ onCalculate }) => {
-
+  // 状态管理
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [schemeName, setSchemeName] = useState('');
+  const [schemes, setSchemes] = useState<CalculationScheme[]>(getAllSchemes());
+  
   const {
     register,
     handleSubmit,
     formState: { errors },
     watch,
+    reset,
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -63,7 +74,28 @@ const InputForm: React.FC<InputFormProps> = ({ onCalculate }) => {
     },
   });
 
-
+  // 表单数据
+  const formData = watch();
+  
+  // 实时计算：当表单数据变化时自动计算
+  React.useEffect(() => {
+    // 延迟计算，避免频繁触发
+    const timer = setTimeout(() => {
+      // 验证表单数据
+      const validationResult = formSchema.safeParse(formData);
+      if (validationResult.success) {
+        // 将表单数据转换为TaxInput类型，处理枚举类型转换
+        const taxInput = {
+          ...validationResult.data,
+          socialSecurityInputType: validationResult.data.socialSecurityInputType as any,
+          bonusTaxType: validationResult.data.bonusTaxType as any
+        };
+        onCalculate(taxInput);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData, onCalculate]);
 
   const onSubmit = (data: FormData) => {
     // 将表单数据转换为TaxInput类型，处理枚举类型转换
@@ -74,10 +106,77 @@ const InputForm: React.FC<InputFormProps> = ({ onCalculate }) => {
     };
     onCalculate(taxInput);
   };
+  
+  // 保存方案
+  const handleSaveScheme = () => {
+    if (!schemeName.trim()) return;
+    
+    try {
+      const taxInput: TaxInput = {
+        ...formData,
+        socialSecurityInputType: formData.socialSecurityInputType as any,
+        bonusTaxType: formData.bonusTaxType as any
+      };
+      saveScheme(schemeName.trim(), taxInput);
+      setSchemes(getAllSchemes());
+      setShowSaveModal(false);
+      setSchemeName('');
+    } catch (error) {
+      console.error('Failed to save scheme:', error);
+    }
+  };
+  
+  // 加载方案
+  const handleLoadScheme = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const schemeId = e.target.value;
+    if (!schemeId) return;
+    
+    const loadedInput = loadScheme(schemeId);
+    if (loadedInput) {
+      reset(loadedInput);
+      onCalculate(loadedInput);
+    }
+    
+    // 重置选择
+    e.target.value = '';
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-xl font-bold mb-6 text-gray-800">工资税收计算</h2>
+      
+      {/* 方案管理 */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <h3 className="text-sm font-semibold mb-3 text-gray-700">方案管理</h3>
+        <div className="flex flex-wrap gap-3">
+          {/* 保存方案按钮 */}
+          <button
+            type="button"
+            onClick={() => setShowSaveModal(true)}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm transition-colors duration-200"
+          >
+            保存当前方案
+          </button>
+          
+          {/* 加载方案选择 */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="loadScheme" className="text-sm text-gray-700">加载方案：</label>
+            <select
+              id="loadScheme"
+              onChange={handleLoadScheme}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">-- 选择方案 --</option>
+              {schemes.map(scheme => (
+                <option key={scheme.id} value={scheme.id}>
+                  {scheme.name} ({new Date(scheme.updatedAt).toLocaleDateString()})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+      
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* 月工资收入 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -266,18 +365,18 @@ const InputForm: React.FC<InputFormProps> = ({ onCalculate }) => {
 
             {/* 大病医疗 */}
             <div>
-              <label htmlFor="大病医疗" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="majorDiseaseMedical" className="block text-sm font-medium text-gray-700 mb-1">
                 大病医疗
               </label>
               <input
               type="number"
-              id="大病医疗"
+              id="majorDiseaseMedical"
               step="0.01"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              {...register('specialDeduction.大病医疗', { valueAsNumber: true })}
+              {...register('specialDeduction.majorDiseaseMedical', { valueAsNumber: true })}
             />
-              {errors.specialDeduction?.大病医疗 && (
-                <p className="mt-1 text-sm text-red-600">{errors.specialDeduction.大病医疗.message}</p>
+              {errors.specialDeduction?.majorDiseaseMedical && (
+                <p className="mt-1 text-sm text-red-600">{errors.specialDeduction.majorDiseaseMedical.message}</p>
               )}
             </div>
 
@@ -392,6 +491,44 @@ const InputForm: React.FC<InputFormProps> = ({ onCalculate }) => {
           </button>
         </div>
       </form>
+      
+      {/* 保存方案模态框 */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800">保存计算方案</h3>
+            <div className="mb-4">
+              <label htmlFor="schemeName" className="block text-sm font-medium text-gray-700 mb-1">
+                方案名称
+              </label>
+              <input
+                type="text"
+                id="schemeName"
+                value={schemeName}
+                onChange={(e) => setSchemeName(e.target.value)}
+                placeholder="请输入方案名称"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors duration-200"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveScheme}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

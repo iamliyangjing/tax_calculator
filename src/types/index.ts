@@ -8,12 +8,12 @@ export interface TaxRate {
 
 // 专项附加扣除类型
 export interface SpecialDeduction {
-  childrenEducation: number;    // 子女教育
-  continuingEducation: number;  // 继续教育
- 大病医疗: number;            // 大病医疗
-  housingLoanInterest: number;  // 住房贷款利息
-  housingRent: number;          // 住房租金
-  supportingElderly: number;    // 赡养老人
+  childrenEducation: number;        // 子女教育
+  continuingEducation: number;      // 继续教育
+  majorDiseaseMedical: number;      // 大病医疗
+  housingLoanInterest: number;      // 住房贷款利息
+  housingRent: number;              // 住房租金
+  supportingElderly: number;        // 赡养老人
 }
 
 // 社保输入方式枚举
@@ -61,6 +61,12 @@ export interface AnnualTaxResult {
   bonusTaxAmount: number;          // 年终奖应纳税额
   bonusTaxableIncome: number;      // 年终奖应纳税所得额
   totalWithBonusTax: number;       // 包含年终奖的总应纳税额
+  // 最优计税方式推荐
+  recommendedBonusTaxType?: BonusTaxType; // 推荐的年终奖计税方式
+  recommendedTaxAmount?: number;          // 推荐方式下的总应纳税额
+  taxSavings?: number;                    // 推荐方式下的节税额
+  separateTaxAmount?: number;             // 单独计税方式下的总应纳税额
+  integratedTaxAmount?: number;           // 并入综合所得计税方式下的总应纳税额
 }
 
 // 综合税收计算结果类型

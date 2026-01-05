@@ -6,7 +6,7 @@ import { calculateTax } from './utils/taxCalculator';
 
 function App() {
   const [taxResult, setTaxResult] = useState<TaxCalculationResult | null>(null);
-  const [currentInput, setCurrentInput] = useState<TaxInput | null>(null);
+  const [currentInput, setCurrentInput] = useState<TaxInput | undefined>(undefined);
 
   const handleCalculate = (data: TaxInput) => {
     const result = calculateTax(data);
